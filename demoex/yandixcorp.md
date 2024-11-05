@@ -12,7 +12,10 @@
    deb [signed-by=/usr/share/keyrings/yandex.gpg] https://repo.yandex.ru/yandex-browser/deb/ stable main
    ```
    ```bash
-   curl -fsSL https://repo.yandex.ru/yandex-browser/YANDEX-BROWSER-KEY.GPG | sudo gpg --dearmor -o /usr/share/keyrings/yandex.gpg
+   curl -fSsL https://repo.yandex.ru/yandex-browser/YANDEX-BROWSER-KEY.GPG | gpg --dearmor | tee /usr/share/keyrings/yandex.gpg > /dev/null
+
+
+   curl -fsSL https://repo.yandex.ru/yandex-browser/YANDEX-BROWSER-KEY.GPG | gpg --dearmor -o /usr/share/keyrings/yandex.gpg
    ```
    ```bash
    sudo apt update

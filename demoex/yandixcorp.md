@@ -1,27 +1,23 @@
-   ```bash
-   sudo nano /etc/apt/sources.list
-   ```
-   ```
-   deb https://repo.yandex.ru/yandex-browser/deb/ stable main
-   ```
-   ```bash
-   curl -fSsL https://repo.yandex.ru/yandex-browser/YANDEX-BROWSER-KEY.GPG | gpg --dearmor | tee /usr/share/keyrings/yandex.gpg > /dev/null
-   ```
-   ```bash
-   sudo apt update
-   ```
+## Установка Яндекс Бразуера для организаций
 
-## Если убрать реп из основного файла, оставить реп в yandex-browser.list то все ок, после ребута не проверял
-> Это ам неовый файл яндекс листа, с ним потом 
+Яндекс Бразуер можно установить в Debian и через репозитории (если добавить их и подписи), через Flatpak/Snap (не корп. версия) или конструктор сборки на оф. сайте. 
+
+1. Для простоты просто зашли в репозитории Яндекса и там нашли нужный нам пакетик (если отдает 404 переходим на родительские директории и смотрим, не изменилось название/местоположение).
 ```
-### THIS FILE IS AUTOMATICALLY CONFIGURED ###
-# You may comment out this entry, but any other modifications may be lost.
-deb [arch=amd64] https://repo.yandex.ru/yandex-browser/deb stable main
+wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-corporate/yandex-browser-corporate_24.7.6.1016-1_amd64.deb
 ```
 
-
-
-
+2. Установить пакетик через dpkg, посмотреть на ошибки.
 ```
-deb [signed-by=/etc/apt/trusted.gpg.d/YANDEX-BROWSER-KEY.GPG arch=amd64] https://repo.yandex.ru/yandex-browser/deb stable main
+dpkg -i yandex-browser-corporate_24.7.6.1016.deb
+```
+
+3. Прошлая команда сказала о неудовлетворенных зависимостях. Все потому, что dpkg умеет устанавливать/удалять пакетики, но не умеет в зависимости для них. Запускаем предложенную команду для установки зависимостей.
+```
+apt install --fix-broken
+```
+
+4. Важное замечание - много графических утилит не работают от рута. Внимательно читайте вывод, если запускаете из консоли. Если запускаете из графики и не открывается - вы вообще ничего не увидите. Чтобы все нормально запустить - выходим из системы, заходим как user/resu. Запускаем yandex-browser-corporate.
+```
+yandex-browser-corporate
 ```

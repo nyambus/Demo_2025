@@ -18,3 +18,10 @@
 # You may comment out this entry, but any other modifications may be lost.
 deb [arch=amd64] https://repo.yandex.ru/yandex-browser/deb stable main
 ```
+
+
+
+
+```
+deb [signed-by=/etc/apt/trusted.gpg.d/YANDEX-BROWSER-KEY.GPG arch=amd64] https://repo.yandex.ru/yandex-browser/deb stable main
+```

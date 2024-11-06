@@ -2,185 +2,104 @@
 ## 2. Конфигурация файлового хранилища (RAID5 NFS)
 
 ---
- 
+
+### 2.1 Создание дисков в Proxmox
+
+
+### 2.2 Настройка RAID5
+
 Скачиваем утилиту mdadm:
 ```
 apt install mdadm -y
 ```
-
-После скачиваем DNS-сервер BIND:
+Проверяем, установилась ли утилита при помощи вывода ее версии:
+```
+sudo mdadm -V
+```
+Прописываем lsblk, смотрим названия созданных ранее дисков по 1 гб:
+```
+lsblk
+```
+После создаем RAID5-массив, указывая `название` устройства, которое необходимо создать (md0), `уровень RAID`, `количество устройств` в создаваемом RAID-массиве и сами `устройства` (sda, sdb, sdc и т.д.):
 ```
 mdadm --create --verbose /dev/md0 --level=5 --raid-devices=3 /dev/sdb /dev/sdc /dev/sdd
-mdadm --detail --scan > /etc/mdadm.conf
 ```
-Редактируем файл `/etc/bind/named.conf.options`
-Файл должен выглядеть следующим образом:
+Сканируем созданный массив и добавляем данные в файл конфигурации:
 ```
-options {
-        directory "/var/cache/bind";
-
-        // If there is a firewall between you and nameservers you want
-        // to talk to, you may need to fix the firewall to allow multiple
-        // ports to talk.  See http://www.kb.cert.org/vuls/id/800113
-
-        // If your ISP provided one or more IP addresses for stable
-        // nameservers, you probably want to use them as forwarders.
-        // Uncomment the following block, and insert the addresses replacing
-        // the all-0's placeholder.
-        listen-on { any; };
-        recursion yes;
-        allow-query { any; };
-        forwarders {
-                77.88.8.8;
-        };
-
-        //========================================================================
-        // If BIND logs error messages about the root key being expired,
-        // you will need to update your keys.  See https://www.isc.org/bind-keys
-        //========================================================================
-        dnssec-validation auto;
-
-        listen-on-v6 { any; };
-};
+mdadm --detail --scan > /etc/mdadm/mdadm.conf
 ```
-Все строчки, что описаны ниже - добавляем внутрь `options`. `//` - просто комментарий.
-
->- **listen-on { any; };**: Этот параметр определяет адреса и порты, на которых DNS-сервер будет слушать запросы. Значение any означает, что сервер будет прослушивать запросы на всех доступных интерфейсах и IP-адресах.
->- **recursion yes;**: Устанавливает, разрешено ли серверу делать рекурсивные запросы. Рекурсивные запросы возникают, когда DNS-сервер запрашивает другие серверы и выполняет несколько итераций поиска до тех пор, пока не получит окончательный ответ.
->- **allow-query { any; };**: Определяет список IP-адресов или подсетей, которым разрешено отправлять запросы на этот DNS-сервер. Значение any позволяет принимать запросы от всех клиентов.
->- **forwarders { 77.88.8.8; };**: Этот параметр используется для настройки сервера DNS в режим "пересылки" (forwarding). Когда сервер получает запрос на имя, которое он не может разрешить (не имеет информации в своих зонах), он может перенаправить запрос на другой DNS-сервер (forwarder), указанный в этой директиве.
-
-Далее перезагружаем:
-```bash
-systemctl --now enable named; systemctl status named; 
+После этого обновляем initramfs, чтобы массив был доступен во время загрузки:
+```
+update-initramfs -u
+```
+Создаем в массиве файловую систему:
+```
+mkfs.ext4 -F /dev/md0
+```
+Создаем директорию, в которую далее будем монтировать RAID-массив (`-p` создает директорию, если ее не существует):
+```
+mkdir -p /raid5
+```
+Монтируем созданную ранее файловую систему в директорию `/raid5`:
+```
+mount /dev/md0 /raid5
+```
+Добавляем новые параметры монтирования файловой системы в файл /etc/fstab для поддержки автоматического монтирования при загрузке:
+```
+echo '/dev/md0 /raid5 ext4 defaults,nofail,discard 0 0' >> /etc/fstab
+```
+Перезагружаемся (`reboot`) и проверяем, что raid5 активен:
+```
+cat /proc/mdstat
 ```
 
-Приводим `/etc/resolv.conf` к следующему виду:
-```
-search au-team.irpo
-nameserver 127.0.0.1
-```
+### 2.3.1 Настройка NFS на HQ-SRV
 
-Проверяем разрешение имен на данном этапе:
-```bash
-root@kk:/home/kk# ping ya.ru
-PING ya.ru (77.88.44.242) 56(84) bytes of data.
-64 bytes from 77.88.44.242: icmp_seq=1 ttl=55 time=24.6 ms
-64 bytes from 77.88.44.242: icmp_seq=2 ttl=55 time=24.7 ms
-64 bytes from 77.88.44.242: icmp_seq=3 ttl=55 time=24.7 ms
-
---- ya.ru ping statistics ---
-3 packets transmitted, 3 received, 0% packet loss, time 2052ms
-rtt min/avg/max/mdev = 24.587/24.670/24.736/0.062 ms
+Устанавливаем nfs-сервер:
 ```
-
-В `/etc/bind/named.conf.local` добавляем:
+apt install nfs-kernel-server
 ```
-zone "au-team.irpo" {
-        type master;
-        file "/etc/bind/db.au-team.irpo";
-};
+Создаем директорию для монтирования
 ```
-
-Создаем файл с настройками прямой зоны и выставляем нужные права:
-```bash
-touch /etc/bind/db.au-team.irpo
-chown bind:bind /etc/bind/db.au-team.irpo
-chmod 600 /etc/bind/db.au-team.irpo
+mkdir -p /raid5/nfs
 ```
-Прописываем в файле `/etc/bind/named.conf.local` обратные зоны - их 2.
-
+qewqeqweqweqw!!!!
 ```
-zone "100.168.192.in-addr.arpa" {
-        type master;
-        file "/etc/bind/db.au-team.irpo-rev1";
-};
-
-zone "200.168.192.in-addr.arpa" {
-        type master;
-        file "/etc/bind/db.au-team.irpo-rev2";
-};
+chown -R nobody:nogroup /raid5/nfs
+```
+Открываем файл конфигурации экспортируемых файловых систем:
+```
+nano /etc/exports
+```
+Добавляем строку в конец файла:
+```
+/raid5/nfs *(rw,sync,no_subtree_check)
+```
+Выполняем команду для применения настроек:
+```
+exportfs -a
+```
+Перезагружаем nfs-сервер:
+```
+systemctl restart nfs-kernel-server
 ```
 
-Создаем файлы, выдаем права:
-```bash
-touch /etc/bind/db.au-team.irpo-rev{1,2}
-chown bind:bind /etc/bind/db.au-team.irpo-rev{1,2}
-chmod 600 /etc/bind/au-team{1,2}rev.db
+### 2.3.2 Настройка NFS на HQ-CLI
+
+Устанавливаем пакета для клиента nfs:
 ```
-
-#### Приводим `/etc/bind/db.au-team.irpo-rev1` к виду:
-
+apt install nfs-common -y
 ```
-$TTL    1D
-@       IN      SOA     au-team.irpo. root.au-team.irpo. (
-                                2024102200      ; serial
-                                12H             ; refresh
-                                1H              ; retry
-                                1W              ; expire
-                                1H              ; ncache
-                        )
-        IN      NS      au-team.irpo.
-1       IN      PTR     hq-rtr.au-team.irpo.
-10      IN      PTR     hq-srv.au-team.irpo.
+Создаем директорию для монтирования сетевой файловой системы:
 ```
-
-#### Приводим `/etc/bind/db.au-team.irpo-rev2` к виду:
-
+mkdir -p /mnt/nfs
 ```
-$TTL    1D
-@       IN      SOA     au-team.irpo. root.au-team.irpo. (
-                                2024102200      ; serial
-                                12H             ; refresh
-                                1H              ; retry
-                                1W              ; expire
-                                1H              ; ncache
-                        )
-        IN      NS      au-team.irpo.
-2       IN      PTR     hq-cli.au-team.irpo.
+Монтируем сетевую файловую систему:
 ```
-
-Проверяем, перезагружаем `bind`: 
-
-```bash
-named-checkconf -z
-systemctl restart named
+mount -t nfs4 192.168.100.10:/raid5/nfs /mnt/nfs
 ```
-
-## 11. Настрока часового пояса на всех устройствах
-
----
-
-### Debian
-Чтобы настроить часовой пояс на машинах с ОС Debian (HQ-SRV, BR-SRV, HQ-CLI, ISP (HQ-SW не трогаем)) сначала на всякий случай обновим пакет tzdata:
-
+Добавляем строку в конец файла `/etc/fstab/`:
 ```
-apt upgrade tzdata
+echo '192.168.100.10:/raid5/nfs /mnt/nfs nfs defaults 0 0' >> /etc/fstab/
 ```
-
-После этого пропишем команду для установки часового пояса:
-```
-timedatectl set-timezone Asia/Yekaterinburg
-```
-
-Проверить правильность установки часового пояса можно командой:
-```
-timedatectl
-```
-
-### EcoRouter
-Чтобы настроить часовой пояс на машинах с ОС EcoRouter (HQ-RTR, BR-RTR) необходимо зайти в режим конфигурации и прописать:
-```
-ntp timezone utc+5
-```
-
-Для проверки в привилегированном режиме использовать команду:
-```
-show ntp timezone
-```
-
-# План действий на ближайшие пары
-
----
-
-Заканчиваем первый модуль, делаем отчет (желательно с ним закончить в субботу) и на том же стенде начинаем делать второй модуль без мануала. **Пункт 2.1** (доменный контроллер samba) пропускаем, далее все реализуемо. Если получится дойти до третьего модуля за короткий срок - **пункт 3.1** (миграция на новый контроллер домена) тоже пропускаем. Проверка полностью выполненного первого модуля будет во вторник, второго - в среду утром.
+`??? либо через mount -a монтируем все из fstab вместо mount -t парой команд выше`

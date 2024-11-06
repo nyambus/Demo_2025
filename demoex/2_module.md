@@ -102,4 +102,11 @@ mount -t nfs4 192.168.100.10:/raid5/nfs /mnt/nfs
 ```
 echo '192.168.100.10:/raid5/nfs /mnt/nfs nfs defaults 0 0' >> /etc/fstab/
 ```
-`??? либо через mount -a монтируем все из fstab вместо mount -t парой команд выше`
+Перезагружаем службы, чтобы изменение в конфигурации `/etc/fstab/` вступило в силу:
+```
+systemctl daemon-reload
+```
+Монтируем все из fstab:
+```
+mount -a
+```
